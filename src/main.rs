@@ -223,8 +223,7 @@ fn update_template(config: &Config) -> String {
                 update_habits(&mut parsed, &mut previous_daily);
                 update_todos(&mut parsed, &previous_daily);
             }
-            let new_daily = mdast_util_to_markdown::to_markdown(&parsed).unwrap();
-            new_daily
+            mdast_util_to_markdown::to_markdown(&parsed).unwrap()
         } else {
             eprintln!(
                 "ERROR: Parsing template failed. Is it valid markdown?: {:?}",
@@ -259,7 +258,7 @@ fn generate_daily(config: Config) {
         // eprintln!("Writing to file: {:?}", &cur_daily_path);
         // println!("{}", today_template);
         write(&cur_daily_path, today_template)
-            .expect(&format!("Error writing to file: {:?}", &cur_daily_path));
+            .unwrap_or_else(|_| panic!("Error writing to file: {:?}", &cur_daily_path));
     }
     println!("{:?}", cur_daily_path);
 }
