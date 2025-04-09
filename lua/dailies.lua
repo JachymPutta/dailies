@@ -2,7 +2,7 @@ local M = {}
 
 local binary_path = vim.fn.fnamemodify(
   vim.api.nvim_get_runtime_file("lua/dailies.lua", false)[1], ":h:h"
-) .. "/target/release/dailies"
+) .. "/result/bin/dailies"
 
 M.setup = function()
   vim.api.nvim_create_user_command("RunDailies", M.run, {})

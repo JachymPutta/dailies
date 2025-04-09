@@ -1,5 +1,11 @@
+# Build outputs
+result
 target_dirs
 target
+
+# Config files
 .dailies.toml
 tmp/
+
+# Virtual environments
 .direnv/

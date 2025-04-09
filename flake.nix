@@ -15,14 +15,21 @@
     flake-utils.lib.eachDefaultSystem (
       system:
       let
-        pkgs = (import nixpkgs) {
+        pkgs = import nixpkgs {
           inherit system;
-          overlays = [
-            (import oxalica)
-          ];
+          overlays = [ (import oxalica) ];
+        };
+
+        rustPackage = pkgs.rustPlatform.buildRustPackage {
+          pname = "dailies";
+          version = "0.1.0";
+          src = ./.;
+          cargoLock = {
+            lockFile = ./Cargo.lock;
+          };
         };
       in
-      rec {
+      {
         devShell = pkgs.mkShell {
           CMAKE_LLVM_DIR = "${pkgs.llvmPackages.libllvm.dev}/lib/cmake/llvm";
           CMAKE_CLANG_DIR = "${pkgs.llvmPackages.libclang.dev}/lib/cmake/clang";
@@ -40,6 +47,9 @@
             just
           ];
         };
+
+        packages.dailies = rustPackage;
+        defaultPackage = rustPackage;
       }
     );
 }
