@@ -1,0 +1,12 @@
+[package]
+name = "dailies"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+chrono = "0.4.40"
+markdown = "1.0.0-alpha.23"
+mdast_util_to_markdown = "0.0.1"
+serde = { version = "1.0.219", features = ["derive"] }
+structopt = "0.3.26"
+toml = "0.8.20"

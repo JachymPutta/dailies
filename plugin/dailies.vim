@@ -1,0 +1,1 @@
+lua require'dailies'.setup()
