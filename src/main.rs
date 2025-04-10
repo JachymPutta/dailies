@@ -192,15 +192,19 @@ fn get_todos_from_prev(node: &Node) -> Vec<Node> {
         let children = &root.children;
         for child in children.iter() {
             if collecting {
+                if let Heading(h) = child {
+                    if h.depth <= priority {
+                        break;
+                    }
+                }
                 todos.push(child.clone());
             }
+
             if let Heading(heading) = child {
                 if let Text(text) = &heading.children[0] {
                     if text.value == "Todos" {
                         collecting = true;
                         priority = heading.depth;
-                    } else if heading.depth <= priority {
-                        collecting = false
                     }
                 }
             }
@@ -224,19 +228,21 @@ fn update_todos(template: &mut Node, previous: &Node) {
 /// Update the generic template based on the last entry
 /// if there is no last entry, keep the generic template
 fn update_template(config: &Config) -> String {
-    eprintln!("Reading template: {:?}", &config.entry_template);
+    // eprintln!("Reading template: {:?}", &config.entry_template);
     if let Ok(contents) = read(&config.entry_template) {
         let template_raw = String::from_utf8(contents).unwrap();
         if let Ok(mut parsed) =
             markdown::to_mdast(&template_raw, &markdown::ParseOptions::default())
         {
-            // TODO: update all the counters / dates etc
             update_title(&mut parsed, config);
             if let Some(mut previous_daily) = get_previous_daily(config) {
                 update_habits(&mut parsed, &mut previous_daily);
                 update_todos(&mut parsed, &previous_daily);
             }
-            mdast_util_to_markdown::to_markdown(&parsed).unwrap()
+            let mut output = mdast_util_to_markdown::to_markdown(&parsed).unwrap();
+            // TODO: Hacky -- handle this at the AST level
+            output = output.replace(r"\[]", "[]");
+            output
         } else {
             eprintln!(
                 "ERROR: Parsing template failed. Is it valid markdown?: {:?}",
@@ -266,6 +272,7 @@ fn generate_daily(config: &Config) {
         //     "{}",
         //     String::from_utf8(read(&cur_daily_path).unwrap()).unwrap()
         // );
+        let _ = update_template(&config);
     } else {
         let today_template = update_template(&config);
         // eprintln!("Writing to file: {:?}", &cur_daily_path);
