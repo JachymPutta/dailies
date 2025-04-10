@@ -6,7 +6,7 @@ use std::{
     collections::HashMap,
     env::{self, current_dir},
     fs::{read, read_dir, write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process,
 };
 
@@ -15,6 +15,19 @@ struct Config {
     dailies_dir: PathBuf,
     entry_template: PathBuf,
     name_template: String,
+}
+
+impl Config {
+    fn resolve_paths(mut self, config_path: &Path) -> Self {
+        let base = config_path.parent().unwrap_or_else(|| Path::new("."));
+        if self.dailies_dir.is_relative() {
+            self.dailies_dir = base.join(&self.dailies_dir);
+        }
+        if self.entry_template.is_relative() {
+            self.entry_template = base.join(&self.entry_template);
+        }
+        self
+    }
 }
 
 fn get_previous_daily(config: &Config) -> Option<Node> {
@@ -239,7 +252,7 @@ fn update_template(config: &Config) -> String {
 
 /// Generate the next file name based on the name_template
 /// specified in the configuration
-fn generate_daily(config: Config) {
+fn generate_daily(config: &Config) {
     let cur_time = chrono::offset::Local::now();
     let cur_daily_name = format!("{}.md", cur_time.format(&config.name_template));
     // eprintln!("{:?}", cur_daily_name);
@@ -331,7 +344,8 @@ fn main() {
             .unwrap_or_else(|e| panic!("Error {:?} reading config: {:?}", e, &config_path)),
     )
     .expect("Error reading config: Invalid characters present");
-    let config: Config = toml::from_str(&config_raw).unwrap();
+    let config_: Config = toml::from_str(&config_raw).unwrap();
+    let config = config_.resolve_paths(&config_path);
     // eprintln!("{:?}", config);
-    generate_daily(config);
+    generate_daily(&config);
 }
