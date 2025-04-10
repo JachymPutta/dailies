@@ -1,4 +1,4 @@
-# %Title
+# {{title}}
 
 ## Habits
 - Using dailies: 0

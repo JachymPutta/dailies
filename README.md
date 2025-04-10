@@ -43,10 +43,10 @@ The most important part of the configuration is the entry template. This is a
 Markdown file that will be used to generate each daily entry. There are no 
 requirements on the structure of the file, but `dailies` will look for several
 sections:
-- Title: A heading containing "%Title" -- this will be substituted for today's date
-- Habits: A heading labeled "Habits" followed by a list of pair of daily habits to keep track of
+- Title: A heading containing `{{title}}` -- this will be substituted for today's date
+- Habits: A heading labeled `Habits` followed by a list of pair of daily habits to keep track of
             habits will get incremented with each day
-- TODOs: A heading labeled "Todos" will get copied from the last daily to the current one 
+- TODOs: A heading labeled `Todos` will get copied from the last daily to the current one 
 
 > NOTE: There is a sample template in `examples/template.md`
 

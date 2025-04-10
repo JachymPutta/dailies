@@ -42,7 +42,7 @@ fn update_title(template: &mut Node, config: &Config) {
         }
         Heading(heading) => {
             if let Text(text) = &mut heading.children[0] {
-                if text.value == "%Title" {
+                if text.value == "{{title}}" {
                     let cur_time = chrono::offset::Local::now();
                     let cur_daily_name =
                         format!("Daily: {}", cur_time.format(&config.name_template));
