@@ -30,7 +30,7 @@ impl Config {
     }
 }
 
-fn get_previous_daily(config: &Config) -> Option<Node> {
+fn get_previous_daily(config: &Config) -> Option<(Node, PathBuf, i32)> {
     let mut dailies_paths = read_dir(&config.dailies_dir)
         .unwrap()
         .map(|res| res.map(|e| e.path()))
@@ -40,8 +40,20 @@ fn get_previous_daily(config: &Config) -> Option<Node> {
     dailies_paths.sort();
     dailies_paths.last().map(|path| {
         // eprintln!("Last daily path: {:?}", &path);
+        let cur_date = chrono::Local::now().date_naive();
+        let prev_stem = path.file_stem().unwrap().to_string_lossy();
+        let prev_date = chrono::NaiveDate::parse_from_str(&prev_stem, &config.name_template)
+            .expect("Failed to parse previous date from file name");
+
+        let duration = cur_date.signed_duration_since(prev_date);
+        let days_since = duration.num_days() as i32;
+
         let prev_raw = String::from_utf8(read(path).unwrap()).unwrap();
-        markdown::to_mdast(&prev_raw, &markdown::ParseOptions::default()).unwrap()
+        (
+            markdown::to_mdast(&prev_raw, &markdown::ParseOptions::default()).unwrap(),
+            path.clone(),
+            days_since,
+        )
     })
 }
 
@@ -120,25 +132,25 @@ fn get_habit_map(node: &Node) -> HashMap<String, i32> {
     habit_map
 }
 
-fn update_habit_counters(node: &mut Node, map_: HashMap<String, i32>) {
+fn update_habit_counters(node: &mut Node, map_: HashMap<String, i32>, days_since_last: i32) {
     // println!("{:?}", map_);
-    fn traverse(cur: &mut Node, map: &HashMap<String, i32>) {
+    fn traverse(cur: &mut Node, map: &HashMap<String, i32>, days_since_last: i32) {
         match cur {
             List(list) => {
                 for node in list.children.iter_mut() {
-                    traverse(node, map);
+                    traverse(node, map, days_since_last);
                 }
             }
             ListItem(item) => {
                 for node in item.children.iter_mut() {
-                    traverse(node, map);
+                    traverse(node, map, days_since_last);
                 }
             }
             Paragraph(par) => {
                 if let Text(text) = &mut par.children[0] {
                     let habit = text.value.split(':').next().unwrap_or("MISSING");
                     if let Some((key, value)) = map.get_key_value(habit) {
-                        let new_habit = format!("{}: {}", key, value + 1);
+                        let new_habit = format!("{}: {}", key, (value + days_since_last));
                         text.value = new_habit;
                     }
                 }
@@ -146,17 +158,17 @@ fn update_habit_counters(node: &mut Node, map_: HashMap<String, i32>) {
             _ => unreachable!("process_habits: Unexpected node in List"),
         }
     }
-    traverse(node, &map_);
+    traverse(node, &map_, days_since_last);
 }
 
 /// Increment all habits by one in the habit list
-fn update_habits(template: &mut Node, previous: &mut Node) {
+fn update_habits(template: &mut Node, previous: &mut Node, days_since_last: i32) {
     let templ_habits_ = find_habit_list(template);
     let prev_habits_ = find_habit_list(previous);
 
     if let (Some(templ_habits), Some(prev_habits)) = (templ_habits_, prev_habits_) {
         let prev_map = get_habit_map(prev_habits);
-        update_habit_counters(templ_habits, prev_map);
+        update_habit_counters(templ_habits, prev_map, days_since_last);
     }
 }
 
@@ -169,7 +181,6 @@ fn get_todo_id(node: &Node) -> Option<usize> {
             if let Heading(heading) = child {
                 if let Text(text) = &heading.children[0] {
                     if text.value == "Todos" && i < len {
-                        // TODO children[i+1] need to be a list
                         return Some(i + 1);
                     }
                 }
@@ -184,23 +195,24 @@ fn get_todo_id(node: &Node) -> Option<usize> {
 /// Collect all Todos from the previous daily, this will collect
 /// everything from the "Todos" heading until the next heading of
 /// the same or lower depth
-fn get_todos_from_prev(node: &Node) -> Vec<Node> {
+fn get_todos_from_prev(node: &mut Node) -> Vec<Node> {
     let mut todos = vec![];
     let mut collecting = false;
     let mut priority = u8::MAX;
     if let Root(root) = node {
-        let children = &root.children;
-        for child in children.iter() {
+        let children = &mut root.children;
+        let mut i = 0;
+        while i < children.len() {
             if collecting {
-                if let Heading(h) = child {
+                if let Heading(h) = &children[i] {
                     if h.depth <= priority {
                         break;
                     }
                 }
-                todos.push(child.clone());
+                let cur = children.remove(i);
+                todos.push(cur);
             }
-
-            if let Heading(heading) = child {
+            if let Heading(heading) = &children[i] {
                 if let Text(text) = &heading.children[0] {
                     if text.value == "Todos" {
                         collecting = true;
@@ -208,6 +220,7 @@ fn get_todos_from_prev(node: &Node) -> Vec<Node> {
                     }
                 }
             }
+            i += 1;
         }
         todos
     } else {
@@ -215,13 +228,15 @@ fn get_todos_from_prev(node: &Node) -> Vec<Node> {
     }
 }
 
-/// Move the TODOs from the last daily
-fn update_todos(template: &mut Node, previous: &Node) {
-    // find nodes to copy
+/// Move the TODOs from the last daily -- remove from previous, add to current
+fn update_todos(template: &mut Node, previous: &mut Node, previous_date: PathBuf) {
     let todo_id = get_todo_id(template);
     if let (Root(root), Some(id)) = (template, todo_id) {
         let todos = get_todos_from_prev(previous);
         root.children.splice(id..id, todos.iter().cloned());
+
+        let prev_output = mdast_util_to_markdown::to_markdown(previous).unwrap();
+        write(previous_date, prev_output).unwrap();
     }
 }
 
@@ -235,10 +250,13 @@ fn update_template(config: &Config) -> String {
             markdown::to_mdast(&template_raw, &markdown::ParseOptions::default())
         {
             update_title(&mut parsed, config);
-            if let Some(mut previous_daily) = get_previous_daily(config) {
-                update_habits(&mut parsed, &mut previous_daily);
-                update_todos(&mut parsed, &previous_daily);
+            if let Some((mut previous_daily, previous_path, days_since_last)) =
+                get_previous_daily(config)
+            {
+                update_habits(&mut parsed, &mut previous_daily, days_since_last);
+                update_todos(&mut parsed, &mut previous_daily, previous_path);
             }
+
             let mut output = mdast_util_to_markdown::to_markdown(&parsed).unwrap();
             // TODO: Hacky -- handle this at the AST level
             output = output.replace(r"\[]", "[]");
@@ -345,7 +363,6 @@ fn find_config() -> PathBuf {
 
 fn main() {
     let config_path = find_config();
-    // eprintln!("{:?}", config_path);
     let config_raw = String::from_utf8(
         read(&config_path)
             .unwrap_or_else(|e| panic!("Error {:?} reading config: {:?}", e, &config_path)),
@@ -353,6 +370,5 @@ fn main() {
     .expect("Error reading config: Invalid characters present");
     let config_: Config = toml::from_str(&config_raw).unwrap();
     let config = config_.resolve_paths(&config_path);
-    // eprintln!("{:?}", config);
     generate_daily(&config);
 }
