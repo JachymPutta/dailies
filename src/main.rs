@@ -3,9 +3,10 @@ use markdown::mdast::Node::*;
 
 use serde::Deserialize;
 use std::{
-    collections::HashMap,
+    collections::HashSet,
     env::{self, current_dir},
-    fs::{read, read_dir, write},
+    fs::{read_dir, read_to_string, write},
+    hash::{Hash, Hasher},
     path::{Path, PathBuf},
     process,
 };
@@ -30,6 +31,45 @@ impl Config {
     }
 }
 
+#[derive(Debug)]
+struct Habit {
+    name: String,
+    count: i32,
+}
+
+impl Habit {
+    fn from_line(s: &str) -> Option<Self> {
+        let parts: Vec<_> = s.split(':').collect();
+        if parts.len() < 2 {
+            return None;
+        }
+        Some(Habit {
+            name: parts[0].trim().into(),
+            count: parts[1].trim().parse().unwrap_or(0),
+        })
+    }
+}
+
+impl PartialEq for Habit {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl Eq for Habit {}
+
+impl Hash for Habit {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+    }
+}
+
+impl std::fmt::Display for Habit {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}: {}", self.name, self.count)
+    }
+}
+
 fn get_previous_daily(config: &Config) -> Option<(Node, PathBuf, i32)> {
     let mut dailies_paths = read_dir(&config.dailies_dir)
         .unwrap()
@@ -38,6 +78,7 @@ fn get_previous_daily(config: &Config) -> Option<(Node, PathBuf, i32)> {
         .unwrap();
 
     dailies_paths.sort();
+    // TODO: check if the last is the current one -- if so return second to last
     dailies_paths.last().map(|path| {
         // eprintln!("Last daily path: {:?}", &path);
         let cur_date = chrono::Local::now().date_naive();
@@ -48,7 +89,7 @@ fn get_previous_daily(config: &Config) -> Option<(Node, PathBuf, i32)> {
         let duration = cur_date.signed_duration_since(prev_date);
         let days_since = duration.num_days() as i32;
 
-        let prev_raw = String::from_utf8(read(path).unwrap()).unwrap();
+        let prev_raw = read_to_string(path).unwrap();
         (
             markdown::to_mdast(&prev_raw, &markdown::ParseOptions::default()).unwrap(),
             path.clone(),
@@ -100,65 +141,65 @@ fn find_habit_list(node: &mut Node) -> Option<&mut Node> {
     }
 }
 
-fn get_habit_map(node: &Node) -> HashMap<String, i32> {
-    let mut habit_map = HashMap::new();
-    fn traverse(cur: &Node, habit_map: &mut HashMap<String, i32>) {
+fn get_habits(node: &Node) -> HashSet<Habit> {
+    let mut habits = HashSet::new();
+    fn traverse(cur: &Node, habits: &mut HashSet<Habit>) {
         match cur {
             List(list) => {
                 for node in list.children.iter() {
-                    traverse(node, habit_map);
+                    traverse(node, habits);
                 }
             }
             ListItem(item) => {
                 for node in item.children.iter() {
-                    traverse(node, habit_map);
+                    traverse(node, habits);
                 }
             }
             Paragraph(par) => {
                 if let Text(text) = &par.children[0] {
-                    let text_raw_ = text.value.clone();
-                    let text_split = text_raw_.split(':').collect::<Vec<_>>();
-                    // TODO: what do we need to assert here? do we allow beyond habit: count?
-                    assert!(text_split.len() >= 2);
-                    let habit = text_split[0].into();
-                    let streak = text_split[1].trim().parse().unwrap_or(0);
-                    habit_map.insert(habit, streak);
-                }
-            }
-            _ => unreachable!("process_habits: Unexpected node in List"),
-        }
-    }
-    traverse(node, &mut habit_map);
-    habit_map
-}
-
-fn update_habit_counters(node: &mut Node, map_: HashMap<String, i32>, days_since_last: i32) {
-    // println!("{:?}", map_);
-    fn traverse(cur: &mut Node, map: &HashMap<String, i32>, days_since_last: i32) {
-        match cur {
-            List(list) => {
-                for node in list.children.iter_mut() {
-                    traverse(node, map, days_since_last);
-                }
-            }
-            ListItem(item) => {
-                for node in item.children.iter_mut() {
-                    traverse(node, map, days_since_last);
-                }
-            }
-            Paragraph(par) => {
-                if let Text(text) = &mut par.children[0] {
-                    let habit = text.value.split(':').next().unwrap_or("MISSING");
-                    if let Some((key, value)) = map.get_key_value(habit) {
-                        let new_habit = format!("{}: {}", key, (value + days_since_last));
-                        text.value = new_habit;
+                    if let Some(habit) = Habit::from_line(&text.value) {
+                        habits.insert(habit);
                     }
                 }
             }
             _ => unreachable!("process_habits: Unexpected node in List"),
         }
     }
-    traverse(node, &map_, days_since_last);
+    traverse(node, &mut habits);
+    habits
+}
+
+fn update_habit_counters(node: &mut Node, habits: HashSet<Habit>, days_since_last: i32) {
+    // println!("{:?}", map_);
+    fn traverse(cur: &mut Node, habits: &HashSet<Habit>, days_since_last: i32) {
+        match cur {
+            List(list) => {
+                for node in list.children.iter_mut() {
+                    traverse(node, habits, days_since_last);
+                }
+            }
+            ListItem(item) => {
+                for node in item.children.iter_mut() {
+                    traverse(node, habits, days_since_last);
+                }
+            }
+            Paragraph(par) => {
+                if let Text(text) = &mut par.children[0] {
+                    if let Some(habit_) = Habit::from_line(&text.value) {
+                        if let Some(habit) = habits.get(&habit_) {
+                            let new_habit = Habit {
+                                name: habit.name.clone(),
+                                count: habit.count + days_since_last,
+                            };
+                            text.value = new_habit.to_string();
+                        }
+                    }
+                }
+            }
+            _ => unreachable!("process_habits: Unexpected node in List"),
+        }
+    }
+    traverse(node, &habits, days_since_last);
 }
 
 /// Increment all habits by one in the habit list
@@ -167,7 +208,7 @@ fn update_habits(template: &mut Node, previous: &mut Node, days_since_last: i32)
     let prev_habits_ = find_habit_list(previous);
 
     if let (Some(templ_habits), Some(prev_habits)) = (templ_habits_, prev_habits_) {
-        let prev_map = get_habit_map(prev_habits);
+        let prev_map = get_habits(prev_habits);
         update_habit_counters(templ_habits, prev_map, days_since_last);
     }
 }
@@ -244,11 +285,8 @@ fn update_todos(template: &mut Node, previous: &mut Node, previous_date: PathBuf
 /// if there is no last entry, keep the generic template
 fn update_template(config: &Config) -> String {
     // eprintln!("Reading template: {:?}", &config.entry_template);
-    if let Ok(contents) = read(&config.entry_template) {
-        let template_raw = String::from_utf8(contents).unwrap();
-        if let Ok(mut parsed) =
-            markdown::to_mdast(&template_raw, &markdown::ParseOptions::default())
-        {
+    if let Ok(contents) = read_to_string(&config.entry_template) {
+        if let Ok(mut parsed) = markdown::to_mdast(&contents, &markdown::ParseOptions::default()) {
             update_title(&mut parsed, config);
             if let Some((mut previous_daily, previous_path, days_since_last)) =
                 get_previous_daily(config)
@@ -363,11 +401,8 @@ fn find_config() -> PathBuf {
 
 fn main() {
     let config_path = find_config();
-    let config_raw = String::from_utf8(
-        read(&config_path)
-            .unwrap_or_else(|e| panic!("Error {:?} reading config: {:?}", e, &config_path)),
-    )
-    .expect("Error reading config: Invalid characters present");
+    let config_raw = read_to_string(&config_path)
+        .unwrap_or_else(|e| panic!("Error {:?} reading config: {:?}", e, &config_path));
     let config_: Config = toml::from_str(&config_raw).unwrap();
     let config = config_.resolve_paths(&config_path);
     generate_daily(&config);
