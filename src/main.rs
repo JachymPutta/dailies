@@ -80,7 +80,7 @@ fn get_previous_daily(config: &Config) -> Option<(Node, PathBuf, i32)> {
     dailies_paths.sort();
     // TODO: check if the last is the current one -- if so return second to last
     dailies_paths.last().map(|path| {
-        // eprintln!("Last daily path: {:?}", &path);
+        eprintln!("Last daily path: {:?}", &path);
         let cur_date = chrono::Local::now().date_naive();
         let prev_stem = path.file_stem().unwrap().to_string_lossy();
         let prev_date = chrono::NaiveDate::parse_from_str(&prev_stem, &config.name_template)
@@ -98,6 +98,8 @@ fn get_previous_daily(config: &Config) -> Option<(Node, PathBuf, i32)> {
     })
 }
 
+// TODO: this should be more generic, pass through the whole ast and just
+// update all occurences of title
 /// Update the title of the new entry with the current date
 fn update_title(template: &mut Node, config: &Config) {
     match template {
@@ -284,10 +286,21 @@ fn update_todos(template: &mut Node, previous: &mut Node, previous_date: PathBuf
 /// Update the generic template based on the last entry
 /// if there is no last entry, keep the generic template
 fn update_template(config: &Config) -> String {
-    // eprintln!("Reading template: {:?}", &config.entry_template);
+    eprintln!("Reading template: {:?}", &config.entry_template);
     if let Ok(contents) = read_to_string(&config.entry_template) {
         if let Ok(mut parsed) = markdown::to_mdast(&contents, &markdown::ParseOptions::default()) {
+            println!(
+                "--------------------------------------------------------------------------------"
+            );
+            println!("{:#?}", parsed);
+            println!(
+                "--------------------------------------------------------------------------------"
+            );
             update_title(&mut parsed, config);
+            println!("{:#?}", parsed);
+            println!(
+                "--------------------------------------------------------------------------------"
+            );
             if let Some((mut previous_daily, previous_path, days_since_last)) =
                 get_previous_daily(config)
             {
@@ -295,6 +308,7 @@ fn update_template(config: &Config) -> String {
                 update_todos(&mut parsed, &mut previous_daily, previous_path);
             }
 
+            println!("{:#?}", parsed);
             let mut output = mdast_util_to_markdown::to_markdown(&parsed).unwrap();
             // TODO: Hacky -- handle this at the AST level
             output = output.replace(r"\[]", "[]");
@@ -317,24 +331,21 @@ fn update_template(config: &Config) -> String {
 fn generate_daily(config: &Config) {
     let cur_time = chrono::offset::Local::now();
     let cur_daily_name = format!("{}.md", cur_time.format(&config.name_template));
-    // eprintln!("{:?}", cur_daily_name);
+    eprintln!("{:?}", cur_daily_name);
     let cur_daily_path = config.dailies_dir.join(PathBuf::from(cur_daily_name));
-    // eprintln!("{:?}", cur_daily_path);
+    eprintln!("{:?}", cur_daily_path);
 
     if cur_daily_path.is_file() {
         // TODO: open the current daily in the $EDITOR
-        // eprintln!("Today's daily already exists, exitting");
-        // println!(
-        //     "{}",
-        //     String::from_utf8(read(&cur_daily_path).unwrap()).unwrap()
-        // );
-        let _ = update_template(&config);
+        eprintln!("Today's daily already exists, exitting");
+        println!("{}", read_to_string(&cur_daily_path).unwrap());
+        let _ = update_template(config);
     } else {
-        let today_template = update_template(&config);
-        // eprintln!("Writing to file: {:?}", &cur_daily_path);
-        // println!("{}", today_template);
-        write(&cur_daily_path, today_template)
-            .unwrap_or_else(|_| panic!("Error writing to file: {:?}", &cur_daily_path));
+        let today_template = update_template(config);
+        eprintln!("Writing to file: {:?}", &cur_daily_path);
+        println!("{}", today_template);
+        // write(&cur_daily_path, today_template)
+        //    .unwrap_or_else(|_| panic!("Error writing to file: {:?}", &cur_daily_path));
     }
     println!("{:?}", cur_daily_path);
 }
