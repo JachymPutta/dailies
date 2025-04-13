@@ -45,6 +45,8 @@
             rustfmt
             cargo
             just
+            nil
+            nixfmt-rfc-style
           ];
         };
 
