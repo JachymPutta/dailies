@@ -20,8 +20,13 @@ fn update_template(config: &Config) -> String {
     // eprintln!("Reading template: {:?}", &config.entry_template);
     if let Ok(contents) = read_to_string(&config.entry_template) {
         if let Ok(mut parsed) = markdown::to_mdast(&contents, &markdown::ParseOptions::default()) {
-            // update_title(&mut parsed, config);
             replace_pattern(&mut parsed, TITLE, &config.get_cur_daily_name());
+
+            if let Some(prompt) = config.get_daily_prompt() {
+                // println!("Found prompt: {}", prompt);
+                replace_pattern(&mut parsed, PROMPT, &prompt);
+            }
+
             if let Some((mut previous_daily, previous_path, days_since_last)) =
                 config.get_previous_daily()
             {
@@ -58,12 +63,7 @@ fn generate_daily(config: &Config) {
     let cur_daily_path = config.dailies_dir.join(PathBuf::from(cur_daily_name));
     // eprintln!("{:?}", cur_daily_path);
 
-    if cur_daily_path.is_file() {
-        // TODO: open the current daily in the $EDITOR
-        // eprintln!("Today's daily already exists, exitting");
-        // println!("{}", read_to_string(&cur_daily_path).unwrap());
-        // let _ = update_template(config);
-    } else {
+    if !cur_daily_path.is_file() {
         let today_template = update_template(config);
         // eprintln!("Writing to file: {:?}", &cur_daily_path);
         // println!("{}", today_template);

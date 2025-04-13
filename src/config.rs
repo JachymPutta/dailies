@@ -1,4 +1,5 @@
 use markdown::mdast::Node;
+use rand::prelude::IteratorRandom;
 use serde::Deserialize;
 use std::env::{self, current_dir};
 use std::fs::{read_dir, read_to_string};
@@ -10,6 +11,7 @@ pub struct Config {
     pub dailies_dir: PathBuf,
     pub entry_template: PathBuf,
     pub date_template: String,
+    pub prompt_path: Option<PathBuf>,
 }
 
 impl Config {
@@ -18,7 +20,7 @@ impl Config {
         let config_raw = read_to_string(&config_path)
             .unwrap_or_else(|e| panic!("Error {:?} reading config: {:?}", e, &config_path));
         let config_: Config = toml::from_str(&config_raw).unwrap();
-        Self::resolve_paths(config_, &config_path)
+        Self::resolve_paths(config_)
     }
 
     pub fn get_previous_daily(&self) -> Option<(Node, PathBuf, i32)> {
@@ -31,7 +33,7 @@ impl Config {
         dailies_paths.sort();
         // TODO: check if the last is the current one -- if so return second to last
         dailies_paths.last().map(|path| {
-            eprintln!("Last daily path: {:?}", &path);
+            // eprintln!("Last daily path: {:?}", &path);
             let cur_date = chrono::Local::now().date_naive();
             let prev_stem = path.file_stem().unwrap().to_string_lossy();
             let prev_date = chrono::NaiveDate::parse_from_str(&prev_stem, &self.date_template)
@@ -54,17 +56,35 @@ impl Config {
         format!("{}", cur_time.format(&self.date_template))
     }
 
-    fn resolve_paths(mut self, config_path: &Path) -> Self {
-        let base = config_path.parent().unwrap_or_else(|| Path::new("."));
-        if self.dailies_dir.is_relative() {
-            self.dailies_dir = base.join(&self.dailies_dir);
+    pub fn get_daily_prompt(&self) -> Option<String> {
+        // println!("Prompt path: {:?}", &self.prompt_path);
+        if let Some(prompt_path) = &self.prompt_path {
+            read_to_string(prompt_path)
+                .unwrap()
+                .lines()
+                .choose(&mut rand::rng())
+                .map(String::from)
+        } else {
+            None
         }
-        if self.entry_template.is_relative() {
-            self.entry_template = base.join(&self.entry_template);
+    }
+
+    pub fn resolve_paths(mut self) -> Self {
+        self.dailies_dir = Self::resolve_path(&self.dailies_dir);
+        self.entry_template = Self::resolve_path(&self.entry_template);
+        if let Some(p) = &self.prompt_path {
+            self.prompt_path = Some(Self::resolve_path(p));
         }
+
         self
     }
 
+    fn resolve_path(original: &Path) -> PathBuf {
+        let expanded = shellexpand::full(original.to_str().unwrap())
+            .unwrap()
+            .to_string();
+        PathBuf::from(&expanded)
+    }
     /// Look for an existing configuration file, if not found
     /// start the flow for creating one
     /// locations that will be checked are:
