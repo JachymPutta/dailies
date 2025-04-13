@@ -17,7 +17,7 @@ use crate::todos::update_todos;
 /// Update the generic template based on the last entry
 /// if there is no last entry, keep the generic template
 fn update_template(config: &Config) -> String {
-    eprintln!("Reading template: {:?}", &config.entry_template);
+    // eprintln!("Reading template: {:?}", &config.entry_template);
     if let Ok(contents) = read_to_string(&config.entry_template) {
         if let Ok(mut parsed) = markdown::to_mdast(&contents, &markdown::ParseOptions::default()) {
             // update_title(&mut parsed, config);
@@ -29,10 +29,12 @@ fn update_template(config: &Config) -> String {
                 update_todos(&mut parsed, &mut previous_daily, previous_path);
             }
 
-            println!("{:#?}", parsed);
+            // println!("{:#?}", parsed);
             let mut output = mdast_util_to_markdown::to_markdown(&parsed).unwrap();
-            // TODO: Hacky -- handle this at the AST level
+
+            // HACK: Handle this at the AST level
             output = output.replace(r"\[]", "[]");
+            output = output.replace(r"***", "---"); // HACK: No idea why --- gets replaced with ***
             output
         } else {
             eprintln!(
@@ -52,21 +54,21 @@ fn update_template(config: &Config) -> String {
 fn generate_daily(config: &Config) {
     let cur_time = chrono::offset::Local::now();
     let cur_daily_name = format!("{}.md", cur_time.format(&config.name_template));
-    eprintln!("{:?}", cur_daily_name);
+    // eprintln!("{:?}", cur_daily_name);
     let cur_daily_path = config.dailies_dir.join(PathBuf::from(cur_daily_name));
-    eprintln!("{:?}", cur_daily_path);
+    // eprintln!("{:?}", cur_daily_path);
 
     if cur_daily_path.is_file() {
         // TODO: open the current daily in the $EDITOR
-        eprintln!("Today's daily already exists, exitting");
-        println!("{}", read_to_string(&cur_daily_path).unwrap());
-        let _ = update_template(config);
+        // eprintln!("Today's daily already exists, exitting");
+        // println!("{}", read_to_string(&cur_daily_path).unwrap());
+        // let _ = update_template(config);
     } else {
         let today_template = update_template(config);
-        eprintln!("Writing to file: {:?}", &cur_daily_path);
-        println!("{}", today_template);
-        // write(&cur_daily_path, today_template)
-        //    .unwrap_or_else(|_| panic!("Error writing to file: {:?}", &cur_daily_path));
+        // eprintln!("Writing to file: {:?}", &cur_daily_path);
+        // println!("{}", today_template);
+        write(&cur_daily_path, today_template)
+            .unwrap_or_else(|_| panic!("Error writing to file: {:?}", &cur_daily_path));
     }
     println!("{:?}", cur_daily_path);
 }

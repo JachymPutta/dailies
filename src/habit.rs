@@ -53,6 +53,7 @@ pub fn update_habits(template: &mut Node, previous: &mut Node, days_since_last: 
     }
 }
 
+// TODO: do we want this to be more generic?
 fn find_habit_list(node: &mut Node) -> Option<&mut Node> {
     if let Root(root) = node {
         let children = &mut root.children;
@@ -77,24 +78,18 @@ fn get_habits(node: &Node) -> HashSet<Habit> {
     let mut habits = HashSet::new();
     fn traverse(cur: &Node, habits: &mut HashSet<Habit>) {
         match cur {
-            List(list) => {
-                for node in list.children.iter() {
-                    traverse(node, habits);
+            Text(text) => {
+                if let Some(habit) = Habit::from_line(&text.value) {
+                    habits.insert(habit);
                 }
             }
-            ListItem(item) => {
-                for node in item.children.iter() {
-                    traverse(node, habits);
-                }
-            }
-            Paragraph(par) => {
-                if let Text(text) = &par.children[0] {
-                    if let Some(habit) = Habit::from_line(&text.value) {
-                        habits.insert(habit);
+            other => {
+                if let Some(children) = other.children() {
+                    for child in children {
+                        traverse(child, habits);
                     }
                 }
             }
-            _ => unreachable!("process_habits: Unexpected node in List"),
         }
     }
     traverse(node, &mut habits);
@@ -102,33 +97,26 @@ fn get_habits(node: &Node) -> HashSet<Habit> {
 }
 
 fn update_habit_counters(node: &mut Node, habits: HashSet<Habit>, days_since_last: i32) {
-    // println!("{:?}", map_);
     fn traverse(cur: &mut Node, habits: &HashSet<Habit>, days_since_last: i32) {
         match cur {
-            List(list) => {
-                for node in list.children.iter_mut() {
-                    traverse(node, habits, days_since_last);
-                }
-            }
-            ListItem(item) => {
-                for node in item.children.iter_mut() {
-                    traverse(node, habits, days_since_last);
-                }
-            }
-            Paragraph(par) => {
-                if let Text(text) = &mut par.children[0] {
-                    if let Some(habit_) = Habit::from_line(&text.value) {
-                        if let Some(habit) = habits.get(&habit_) {
-                            let new_habit = Habit {
-                                name: habit.name.clone(),
-                                count: habit.count + days_since_last,
-                            };
-                            text.value = new_habit.to_string();
-                        }
+            Text(text) => {
+                if let Some(habit_) = Habit::from_line(&text.value) {
+                    if let Some(habit) = habits.get(&habit_) {
+                        let new_habit = Habit {
+                            name: habit.name.clone(),
+                            count: habit.count + days_since_last,
+                        };
+                        text.value = new_habit.to_string();
                     }
                 }
             }
-            _ => unreachable!("process_habits: Unexpected node in List"),
+            other => {
+                if let Some(children) = other.children_mut() {
+                    for child in children {
+                        traverse(child, habits, days_since_last);
+                    }
+                }
+            }
         }
     }
     traverse(node, &habits, days_since_last);
