@@ -27,7 +27,7 @@ fields:
 ```toml
 dailies_dir = "<DIR>" # Directory to save daily entries to
 entry_template = "<PATH>" # Which template to use
-name_template = "%Y-%m-%d" # Entry naming convention -- RECOMMENDED TO KEEP UNCHANGED
+date_template = "%Y-%m-%d" # Format used for date entries
 ```
 
 Dailies will look for a configuration file in the following locations, in order:

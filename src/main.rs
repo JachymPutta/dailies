@@ -49,11 +49,11 @@ fn update_template(config: &Config) -> String {
     }
 }
 
-/// Generate the next file name based on the name_template
+/// Generate the next file name based on the date_template
 /// specified in the configuration
 fn generate_daily(config: &Config) {
     let cur_time = chrono::offset::Local::now();
-    let cur_daily_name = format!("{}.md", cur_time.format(&config.name_template));
+    let cur_daily_name = format!("{}.md", cur_time.format(&config.date_template));
     // eprintln!("{:?}", cur_daily_name);
     let cur_daily_path = config.dailies_dir.join(PathBuf::from(cur_daily_name));
     // eprintln!("{:?}", cur_daily_path);

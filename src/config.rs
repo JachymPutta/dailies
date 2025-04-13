@@ -9,7 +9,7 @@ use std::process::exit;
 pub struct Config {
     pub dailies_dir: PathBuf,
     pub entry_template: PathBuf,
-    pub name_template: String,
+    pub date_template: String,
 }
 
 impl Config {
@@ -34,7 +34,7 @@ impl Config {
             eprintln!("Last daily path: {:?}", &path);
             let cur_date = chrono::Local::now().date_naive();
             let prev_stem = path.file_stem().unwrap().to_string_lossy();
-            let prev_date = chrono::NaiveDate::parse_from_str(&prev_stem, &self.name_template)
+            let prev_date = chrono::NaiveDate::parse_from_str(&prev_stem, &self.date_template)
                 .expect("Failed to parse previous date from file name");
 
             let duration = cur_date.signed_duration_since(prev_date);
@@ -51,7 +51,7 @@ impl Config {
 
     pub fn get_cur_daily_name(&self) -> String {
         let cur_time = chrono::offset::Local::now();
-        format!("{}", cur_time.format(&self.name_template))
+        format!("{}", cur_time.format(&self.date_template))
     }
 
     fn resolve_paths(mut self, config_path: &Path) -> Self {
