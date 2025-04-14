@@ -27,6 +27,7 @@ fields:
 ```toml
 dailies_dir = "<DIR>" # Directory to save daily entries to
 entry_template = "<PATH>" # Which template to use
+prompt_path = "<PATH>" # List of prompts -- {{prompt}} will be replaced by a random one
 date_template = "%Y-%m-%d" # Format used for date entries
 ```
 
@@ -43,10 +44,21 @@ The most important part of the configuration is the entry template. This is a
 Markdown file that will be used to generate each daily entry. There are no 
 requirements on the structure of the file, but `dailies` will look for several
 sections:
-- Title: A heading containing `{{title}}` -- this will be substituted for today's date
-- Habits: A heading labeled `Habits` followed by a list of pair of daily habits to keep track of
-            habits will get incremented with each day
-- TODOs: A heading labeled `Todos` will get copied from the last daily to the current one 
+- Header -- optionally the template can include a 'obsidian-style' header which
+    will allow you to browse dailies within Obsidian, sample header may look like this:
+```raw
+---
+id: "{{title}}"
+tags:
+- daily-notes
+---
+
+```
+- `{{title}}` -- will be substituted for today's date according to the `date_template`
+- `{{prompt}}` -- will be substituted for a random prompt from the `prompt_path`
+- A heading labeled `Habits` followed by a list of `<name>: <streak>` will automatically 
+    be incremented with each generated daily, to keep track of habit streaks
+- A heading labeled `Todos` will get copied from the last daily to the current one 
 
 > NOTE: There is a sample template in `examples/template.md`
 
