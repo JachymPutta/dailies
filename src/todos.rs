@@ -81,16 +81,14 @@ fn insert_todos_section(base_markdown: &str, new_todos_content: &str) -> String 
             }
             result.push_str(line);
             result.push('\n');
-        } else {
-            if trimmed.starts_with('#') {
-                let header_level = trimmed.chars().take_while(|&c| c == '#').count();
-                if let Some(level) = todos_level {
-                    if header_level <= level {
-                        in_empty_todos = false;
-                        result.push_str(line);
-                        result.push('\n');
-                        continue;
-                    }
+        } else if trimmed.starts_with('#') {
+            let header_level = trimmed.chars().take_while(|&c| c == '#').count();
+            if let Some(level) = todos_level {
+                if header_level <= level {
+                    in_empty_todos = false;
+                    result.push_str(line);
+                    result.push('\n');
+                    continue;
                 }
             }
         }
