@@ -1,0 +1,3 @@
+[toolchain]
+channel = "1.85"
+components = [ "cargo", "clippy", "rust-src", "rustc", "rustfmt", "llvm-tools-preview", "rust-analyzer" ]

@@ -35,8 +35,7 @@
           nativeBuildInputs = with pkgs; [
             alejandra
             pkg-config
-            rustc
-            cargo
+            (rust-bin.fromRustupToolchainFile ./rust-toolchain.toml)
             just
             nil
             nixfmt-rfc-style
