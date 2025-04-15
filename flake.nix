@@ -32,6 +32,9 @@
       {
         devShell = pkgs.mkShell {
           RUST_SRC_PATH = pkgs.rustPlatform.rustLibSrc;
+          shellHook = ''
+            export CARGO_TARGET_DIR="$(git rev-parse --show-toplevel)/target_dirs/nix_rustc";
+          '';
           nativeBuildInputs = with pkgs; [
             alejandra
             pkg-config
