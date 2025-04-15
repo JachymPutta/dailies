@@ -44,7 +44,7 @@ impl Config {
 
             let prev_raw = read_to_string(path).unwrap();
             (
-                markdown::to_mdast(&prev_raw, &markdown::ParseOptions::default()).unwrap(),
+                markdown::to_mdast(&prev_raw, &markdown::ParseOptions::gfm()).unwrap(),
                 path.clone(),
                 days_since,
             )

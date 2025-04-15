@@ -1,72 +1,102 @@
+use crate::mdast::mdast_to_string;
 use markdown::mdast::Node;
-use markdown::mdast::Node::*;
-use std::fs::write;
+use std::fs::{read_to_string, write};
 use std::path::PathBuf;
 
 /// Move the TODOs from the last daily -- remove from previous, add to current
-pub fn update_todos(template: &mut Node, previous: &mut Node, previous_date: PathBuf) {
-    let todo_id = get_todo_id(template);
-    if let (Root(root), Some(id)) = (template, todo_id) {
-        let todos = get_todos_from_prev(previous);
-        root.children.splice(id..id, todos.iter().cloned());
-
-        let prev_output = mdast_util_to_markdown::to_markdown(previous).unwrap();
-        write(previous_date, prev_output).unwrap();
-    }
+pub fn update_todos(template: &Node, previous_date: &PathBuf) -> String {
+    let template_str = mdast_to_string(template);
+    let prev_str = read_to_string(previous_date).unwrap();
+    let (prev, todos) = remove_todos_section(&prev_str);
+    write(previous_date, prev).unwrap();
+    insert_todos_section(&template_str, &todos)
 }
 
-/// Find the element index in the root hierarchy where todos are
-fn get_todo_id(node: &Node) -> Option<usize> {
-    if let Root(root) = node {
-        let children = &root.children;
-        let len = children.len();
-        for (i, child) in children.iter().enumerate() {
-            if let Heading(heading) = child {
-                if let Text(text) = &heading.children[0] {
-                    if text.value == "Todos" && i < len {
-                        return Some(i + 1);
+// HACK: this should really be handled at the AST level
+fn remove_todos_section(markdown: &str) -> (String, String) {
+    let mut main_content = String::new();
+    let mut todos_section = String::new();
+    let mut skipping = false; // Indicates we're inside the todos section.
+    let mut todos_level: Option<usize> = None; // Will hold the header level for the todos section.
+
+    for line in markdown.lines() {
+        let trimmed = line.trim_start();
+        if !skipping {
+            if trimmed.starts_with('#') {
+                let header_level = trimmed.chars().take_while(|&c| c == '#').count();
+                let header_text = trimmed[header_level..].trim_start();
+                if header_text.to_lowercase().starts_with("todos") {
+                    skipping = true;
+                    todos_level = Some(header_level);
+                    main_content.push_str(line);
+                    main_content.push('\n');
+                    continue;
+                }
+            }
+            main_content.push_str(line);
+            main_content.push('\n');
+        } else {
+            if trimmed.starts_with('#') {
+                let header_level = trimmed.chars().take_while(|&c| c == '#').count();
+                if let Some(level) = todos_level {
+                    if header_level <= level {
+                        skipping = false;
+                        main_content.push_str(line);
+                        main_content.push('\n');
+                        continue;
+                    }
+                }
+            }
+            todos_section.push_str(line);
+            todos_section.push('\n');
+        }
+    }
+
+    (main_content, todos_section)
+}
+
+// HACK: this should really be handled at the AST level
+fn insert_todos_section(base_markdown: &str, new_todos_content: &str) -> String {
+    let mut result = String::new();
+    let mut in_empty_todos = false;
+    let mut todos_level: Option<usize> = None;
+    let mut inserted = false;
+
+    for line in base_markdown.lines() {
+        let trimmed = line.trim_start();
+        if !in_empty_todos {
+            if trimmed.starts_with('#') {
+                let header_level = trimmed.chars().take_while(|&c| c == '#').count();
+                let header_text = trimmed[header_level..].trim_start();
+                if header_text.to_lowercase().starts_with("todos") {
+                    todos_level = Some(header_level);
+                    in_empty_todos = true;
+                    result.push_str(line);
+                    result.push('\n');
+                    result.push_str(new_todos_content);
+                    result.push('\n');
+                    inserted = true;
+                    continue;
+                }
+            }
+            result.push_str(line);
+            result.push('\n');
+        } else {
+            if trimmed.starts_with('#') {
+                let header_level = trimmed.chars().take_while(|&c| c == '#').count();
+                if let Some(level) = todos_level {
+                    if header_level <= level {
+                        in_empty_todos = false;
+                        result.push_str(line);
+                        result.push('\n');
+                        continue;
                     }
                 }
             }
         }
-        None
-    } else {
-        None
     }
-}
-
-/// Collect all Todos from the previous daily, this will collect
-/// everything from the "Todos" heading until the next heading of
-/// the same or lower depth
-fn get_todos_from_prev(node: &mut Node) -> Vec<Node> {
-    let mut todos = vec![];
-    let mut collecting = false;
-    let mut priority = u8::MAX;
-    if let Root(root) = node {
-        let children = &mut root.children;
-        let mut i = 0;
-        while i < children.len() {
-            if collecting {
-                if let Heading(h) = &children[i] {
-                    if h.depth <= priority {
-                        break;
-                    }
-                }
-                let cur = children.remove(i);
-                todos.push(cur);
-            }
-            if let Heading(heading) = &children[i] {
-                if let Text(text) = &heading.children[0] {
-                    if text.value == "Todos" {
-                        collecting = true;
-                        priority = heading.depth;
-                    }
-                }
-            }
-            i += 1;
-        }
-        todos
-    } else {
-        todos
+    if !inserted {
+        result.push_str(new_todos_content);
     }
+    result
 }
