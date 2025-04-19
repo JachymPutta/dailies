@@ -2,6 +2,16 @@
 name = "dailies"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+description = "Daily journaling in plain markdown"
+repository = "https://github.com/JachymPutta/dailies"
+readme = "README.md"
+keywords = ["dailies", "journal", "note-taking"]
+categories = ["command-line-utilities"]
+authors = ["Jachym Putta"]
+exclude = [
+    "examples/*",
+]
 
 [dependencies]
 chrono = "0.4.40"
